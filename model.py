@@ -1,7 +1,9 @@
+import os
 import math
 
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 class Transformer(nn.Module):
     def __init__(self, model_dim, src_vocab_size, tgt_vocab_size, max_length):
@@ -10,7 +12,7 @@ class Transformer(nn.Module):
         self.tgt_vocab_size = tgt_vocab_size
         self.max_length = max_length
         self.model_dim = model_dim
-        self.num_identical_layers = 6
+        # self.num_identical_layers = 6
         self.h = 8
         self.positional_encoding_constants = self.get_positional_encoding_constants()
 
@@ -22,10 +24,10 @@ class Transformer(nn.Module):
         self.final_linear = nn.Linear(self.model_dim, self.tgt_vocab_size)
         self.softmax = nn.Softmax(dim = 2)
 
-    def forward(self, x, y): # x : [2, 3, 4, ...]
+    def forward(self, x, y): # x : encoder_input, y : decoder_input
         encoder_input = self.embedding_dropout(self.positional_encoding(self.input_embedding(x)))
         encoder_output = self.encoder(encoder_input)
-        decoder_output = self.decoder(self.embedding_dropout(self.positional_encoding(self.output_embedding(y)), encoder_output))
+        decoder_output = self.decoder(self.embedding_dropout(self.positional_encoding(self.output_embedding(y))), encoder_output)
         final_output = self.softmax(self.final_linear(decoder_output))
         return final_output
 
@@ -39,12 +41,40 @@ class Transformer(nn.Module):
         for pos in range(self.max_length):
             pos_constants = []
             for idx in range(self.model_dim):
-                if idx % 2 == 0: # idx = 2 * i -> 2 * i
+                if idx % 2 == 0: # idx = 2 * i -> 2 * i = idx
                     pos_constants.append(math.sin(pos / 10000 ** (idx / self.model_dim)))
                 else: # idx = 2 * i + 1 -> 2 * i = idx - 1
                     pos_constants.append(math.cos(pos / 10000 ** ((idx  - 1) / self.model_dim)))
             positional_encoding_constants.append(pos_constants)
         return torch.tensor(positional_encoding_constants)
+    
+    def save_model(self, output_path, epoch, loss, val_loss):
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        output_filename = os.path.join(output_path, f"weights_{epoch:03d}_{loss:.4f}_{val_loss:.4f}.pt")
+        torch.save(self.state_dict(), output_filename)
+        return output_filename
+
+    def plot(self, output_path, history):
+        plt.subplot(2, 1, 1)
+        plt.title('Accuracy versus Epoch')
+        plt.plot(history['accuracy'])
+        plt.plot(history['val_accuracy'])
+        plt.legend(['accuracy', 'val_accuracy'], loc = 'upper right')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+
+        plt.subplot(2, 1, 2)
+        plt.title('Loss versus Epoch')
+        plt.plot(history['loss'])
+        plt.plot(history['val_loss'])
+        plt.legend(['loss', 'val_loss'], loc = 'upper right')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_path, "training_result.png"))
 
 class Encoder(nn.Module):
     def __init__(self, model_dim, h):
@@ -52,6 +82,7 @@ class Encoder(nn.Module):
         self.model_dim = model_dim
         self.h = h
 
+        # TODO : num_identical_layers를 이용할 수 있을까?
         self.identical_layer1 = EncoderIdenticalLayer(self.model_dim, self.h)
         self.identical_layer2 = EncoderIdenticalLayer(self.model_dim, self.h)
         self.identical_layer3 = EncoderIdenticalLayer(self.model_dim, self.h)
@@ -82,10 +113,10 @@ class EncoderIdenticalLayer(nn.Module):
 
         self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True)
         self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True)
-        self.layer_normalization2 = nn.LayerNorm(self.model_dim) # TODO: 맞나?
+        self.layer_normalization2 = nn.LayerNorm(self.model_dim) # TODO(completed): 맞나?
 
         self.dropout = nn.Dropout(p = 0.1)
-        self.softmax = nn.Softmax(dim = 2) # TODO: 이게 맞나? 2인 것 같다.
+        self.softmax = nn.Softmax(dim = 2) # TODO(completed): 이게 맞나? 2인 것 같다.
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -164,13 +195,13 @@ class DecoderIdenticalLayer(nn.Module):
         
         self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True)
         self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True)
-        self.layer_normalization3 = nn.LayerNorm(self.model_dim) # TODO: 맞나?
+        self.layer_normalization3 = nn.LayerNorm(self.model_dim)
 
         self.dropout = nn.Dropout(p = 0.1)
-        self.softmax = nn.Softmax(dim = 2) # TODO: 이게 맞나? 2인 것 같다.
+        self.softmax = nn.Softmax(dim = 2)
         self.relu = nn.ReLU()
 
-    def forward(self, x, y): # TODO: masking 구현.
+    def forward(self, x, y): # TODO(completed): masking 구현.
         ### Sublayer 1
         # Masked Multi-Head Attention
         splitted_x_list = []
@@ -191,7 +222,7 @@ class DecoderIdenticalLayer(nn.Module):
         multi_head_attention_output_first = self.layer_normalization1(multi_head_attention_output_first)
 
         ## Sublayer 2
-        # Masked Multi-Head Attention
+        # Multi-Head Attention
         """
         queries : come from previous decoder layer
         keys, values : come from the output of the encoder
@@ -224,7 +255,7 @@ class DecoderIdenticalLayer(nn.Module):
 
         # Add & Layer Normalization
         ffn_output += multi_head_attention_output_second
-        ffn_output = self.layer_normalization2(ffn_output)
+        ffn_output = self.layer_normalization3(ffn_output)
         return ffn_output
 
     def masking(self, x):
