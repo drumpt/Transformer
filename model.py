@@ -5,6 +5,13 @@ import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 
+if torch.cuda.is_available():
+    torch.cuda.set_device(0)
+    device = "cuda:0"
+else:
+    device = "cpu"
+# print(f"Use {device} for torch")
+
 class Transformer(nn.Module):
     def __init__(self, model_dim, src_vocab_size, tgt_vocab_size, max_length):
         super().__init__()
@@ -12,22 +19,21 @@ class Transformer(nn.Module):
         self.tgt_vocab_size = tgt_vocab_size
         self.max_length = max_length
         self.model_dim = model_dim
-        # self.num_identical_layers = 6
         self.h = 8
         self.positional_encoding_constants = self.get_positional_encoding_constants()
 
-        self.input_embedding = nn.Embedding(self.src_vocab_size, self.model_dim)
-        self.output_embedding = nn.Embedding(self.tgt_vocab_size, self.model_dim)
-        self.embedding_dropout = nn.Dropout(p = 0.1)
-        self.encoder = Encoder(self.model_dim, self.h)
-        self.decoder = Decoder(self.model_dim, self.h)
-        self.final_linear = nn.Linear(self.model_dim, self.tgt_vocab_size)
-        self.softmax = nn.Softmax(dim = 2)
+        self.input_embedding = nn.Embedding(self.src_vocab_size, self.model_dim).to(device)
+        self.output_embedding = nn.Embedding(self.tgt_vocab_size, self.model_dim).to(device)
+        self.embedding_dropout = nn.Dropout(p = 0.1).to(device)
+        self.encoder = Encoder(self.model_dim, self.h).to(device)
+        self.decoder = Decoder(self.model_dim, self.h).to(device)
+        self.final_linear = nn.Linear(self.model_dim, self.tgt_vocab_size).to(device)
+        self.softmax = nn.Softmax(dim = 2).to(device)
 
     def forward(self, x, y): # x : encoder_input, y : decoder_input
-        encoder_input = self.embedding_dropout(self.positional_encoding(self.input_embedding(x)))
+        encoder_input = self.embedding_dropout(self.positional_encoding(self.input_embedding(x) * math.sqrt(self.model_dim)))
         encoder_output = self.encoder(encoder_input)
-        decoder_output = self.decoder(self.embedding_dropout(self.positional_encoding(self.output_embedding(y))), encoder_output)
+        decoder_output = self.decoder(self.embedding_dropout(self.positional_encoding(self.output_embedding(y) * math.sqrt(self.model_dim))), encoder_output)
         final_output = self.softmax(self.final_linear(decoder_output))
         return final_output
 
@@ -82,7 +88,7 @@ class Encoder(nn.Module):
         self.model_dim = model_dim
         self.h = h
 
-        # TODO : num_identical_layers를 이용할 수 있을까?
+        # TODO(completed) : num_identical_layers를 이용할 수 있을까? clone을 이용하면 됨.
         self.identical_layer1 = EncoderIdenticalLayer(self.model_dim, self.h)
         self.identical_layer2 = EncoderIdenticalLayer(self.model_dim, self.h)
         self.identical_layer3 = EncoderIdenticalLayer(self.model_dim, self.h)
