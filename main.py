@@ -1,5 +1,6 @@
 import os
 import argparse
+import gc
 
 import torch
 import torch.nn as nn
@@ -9,7 +10,8 @@ from tqdm import tqdm
 
 if torch.cuda.is_available():
     torch.cuda.set_device(0)
-    device = "cuda:0"
+    # device = "cuda"
+    device = "cpu"
 else:
     device = "cpu"
 print(f"Use {device} for torch")
@@ -28,29 +30,34 @@ class LabelSmoothingsLoss(nn.Module):
         self.dim = dim
         self.is_train = is_train
 
-    def forward(self, pred, target, pad_start_idx_list):
-        if self.is_train:
-            pred_list, target_list = [], []
-            for batch_idx in range(pred.shape[0]):
-                pred_list.append(pred[batch_idx, :pad_start_idx_list[batch_idx], :])
-                target_list.append(target[batch_idx, :pad_start_idx_list[batch_idx]])
+    def forward(self, pred, target, pad_start_idx_list = None):
+        # if self.is_train and pad_start_idx_list:
+        #     pred_list, target_list = [], []
+        #     for batch_idx in range(pred.shape[0]):
+        #         pred_list.append(pred[batch_idx, :pad_start_idx_list[batch_idx], :])
+        #         target_list.append(target[batch_idx, :pad_start_idx_list[batch_idx]])
 
-            loss = 0
-            for batch_idx in range(pred.shape[0]):
-                pred_dist = torch.log(pred_list[batch_idx].clone().detach().requires_grad_(True))
-                true_dist = torch.zeros_like(pred_dist)
-                true_dist.fill_(self.smoothing / (self.num_classes - 1))
-                true_dist.scatter_(self.dim, target_list[batch_idx].unsqueeze(self.dim), self.confidence)
-                loss += torch.sum(-true_dist * pred_dist)
-            loss /= pred.shape[0]
-            return loss
+        #     loss = 0
+        #     for batch_idx in range(pred.shape[0]):
+        #         pred_dist = torch.log(pred_list[batch_idx].clone().detach().requires_grad_(True))
+        #         true_dist = torch.zeros_like(pred_dist)
+        #         true_dist.fill_(self.smoothing / (self.num_classes - 1))
+        #         true_dist.scatter_(self.dim, target_list[batch_idx].unsqueeze(self.dim), self.confidence)
+        #         loss += torch.sum(-true_dist * pred_dist)
+        #     loss /= pred.shape[0]
+        #     return loss
 
-        else:
-            pred = torch.log(pred.clone().detach().requires_grad_(True))
-            true_dist = torch.zeros_like(pred)
-            true_dist.fill_(self.smoothing / (self.num_classes - 1))
-            true_dist.scatter_(self.dim, torch.tensor(target).data.unsqueeze(self.dim), self.confidence)
-            return torch.mean(torch.sum(-true_dist * pred, dim = self.dim))
+        # else:
+            # pred = torch.log(pred.clone().detach().requires_grad_(True))
+            # true_dist = torch.zeros_like(pred)
+            # true_dist.fill_(self.smoothing / (self.num_classes - 1))
+            # true_dist.scatter_(self.dim, target.data.unsqueeze(self.dim), self.confidence)
+            # return torch.mean(torch.sum(-true_dist * pred, dim = self.dim))
+        pred = torch.log(pred.clone().detach().requires_grad_(True))
+        true_dist = torch.zeros_like(pred)
+        true_dist.fill_(self.smoothing / (self.num_classes - 1))
+        true_dist.scatter_(self.dim, target.data.unsqueeze(self.dim), self.confidence)
+        return torch.mean(torch.sum(-true_dist * pred, dim = self.dim))
 
 def get_pad_start_idx_list(tgt_batch):
     pad_start_idx_list = []
@@ -63,7 +70,8 @@ def get_pad_start_idx_list(tgt_batch):
     return pad_start_idx_list
 
 def get_learning_rate(model_dim, step_num, warmup_steps):
-    return (model_dim ** (-0.5)) * min(step_num ** (-0.5), step_num * (warmup_steps ** (-1.5)))
+    # return (model_dim ** (-0.5)) * min(step_num ** (-0.5), step_num * (warmup_steps ** (-1.5)))
+    return 1e-3
 
 def main(args):
     src, tgt = load_data(args.path)
@@ -88,7 +96,7 @@ def main(args):
     warmup_steps = 4000
 
     # Define model
-    transformer = model.Transformer(model_dim, src_vocab_size, tgt_vocab_size, max_length).to(device)
+    transformer = model.Transformer(model_dim, src_vocab_size, tgt_vocab_size, max_length)
     if args.test and args.model_path:
         transformer.load_state_dict(torch.load(args.model_path))
         transformer.eval()
@@ -130,14 +138,14 @@ def main(args):
 
                 prd_batch = transformer(torch.tensor(src_batch).to(device), torch.tensor(tgt_batch).to(device))
                 pad_start_idx_list = get_pad_start_idx_list(torch.tensor(tgt_batch))
-                loss = train_loss_function(torch.tensor(prd_batch).to(device), torch.tensor(tgt_batch).to(device), pad_start_idx_list)
+                loss = train_loss_function(torch.tensor(prd_batch).cpu(), torch.tensor(tgt_batch).cpu(), pad_start_idx_list)
                 loss.backward()
                 optimizer.step()
                 step_num += 1
 
                 total_train_size += len(src_batch)
                 epoch_train_loss += loss
-                epoch_train_correct += int((torch.max(torch.tensor(src_batch).data, -1).indices == torch.max(torch.tensor(tgt_batch).data, -1).indices).sum())
+                epoch_train_correct += int(torch.sum(torch.argmax(torch.tensor(prd_batch).data, -1) == torch.tensor(tgt_batch)))
 
             epoch_train_loss /= total_train_size
             epoch_train_accuracy = epoch_train_correct / total_train_size
@@ -148,11 +156,11 @@ def main(args):
             # TODO: validation
             for src_batch, tgt_batch in tqdm(valid_loader):
                 prd_batch = transformer(torch.tensor(src_batch).to(device), torch.tensor(tgt_batch).to(device))
-                loss = validation_loss_function(torch.tensor(prd_batch).to(device), torch.tensor(tgt_batch).to(device))
+                loss = validation_loss_function(torch.tensor(prd_batch).cpu(), torch.tensor(tgt_batch).cpu())
 
                 total_validation_size += len(src_batch)
                 epoch_validation_loss += loss
-                epoch_validation_correct += int((torch.max(torch.tensor(src_batch).data, -1).indices == torch.max(torch.tensor(tgt_batch).data, -1).indices).sum())
+                epoch_validation_correct += int(torch.sum(torch.argmax(torch.tensor(prd_batch).data, -1) == torch.tensor(tgt_batch)))
 
             epoch_validation_loss /= total_validation_size
             epoch_validation_accuracy = epoch_validation_correct / total_validation_size
@@ -164,6 +172,9 @@ def main(args):
             print(f"accuracy : {epoch_train_accuracy:.6f}, val_accuracy : {epoch_validation_accuracy:.6f}") 
 
             transformer.save_model(args.output_path, epoch + 1, epoch_train_loss, epoch_validation_loss)
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
         transformer.plot(args.output_path, history)
 
@@ -217,7 +228,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128)
+        default=16)
     parser.add_argument(
         '--test',
         action='store_true')

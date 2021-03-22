@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 
 if torch.cuda.is_available():
     torch.cuda.set_device(0)
-    device = "cuda:0"
+    # device = "cuda"
+    device = "cpu"
 else:
     device = "cpu"
-# print(f"Use {device} for torch")
 
 class Transformer(nn.Module):
     def __init__(self, model_dim, src_vocab_size, tgt_vocab_size, max_length):
@@ -52,7 +52,7 @@ class Transformer(nn.Module):
                 else: # idx = 2 * i + 1 -> 2 * i = idx - 1
                     pos_constants.append(math.cos(pos / 10000 ** ((idx  - 1) / self.model_dim)))
             positional_encoding_constants.append(pos_constants)
-        return torch.tensor(positional_encoding_constants)
+        return torch.tensor(positional_encoding_constants).to(device)
     
     def save_model(self, output_path, epoch, loss, val_loss):
         if not os.path.exists(output_path):
@@ -89,12 +89,12 @@ class Encoder(nn.Module):
         self.h = h
 
         # TODO(completed) : num_identical_layers를 이용할 수 있을까? clone을 이용하면 됨.
-        self.identical_layer1 = EncoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer2 = EncoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer3 = EncoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer4 = EncoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer5 = EncoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer6 = EncoderIdenticalLayer(self.model_dim, self.h)
+        self.identical_layer1 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer2 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer3 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer4 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer5 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer6 = EncoderIdenticalLayer(self.model_dim, self.h).to(device)
 
     def forward(self, x):
         x = self.identical_layer1(x)
@@ -111,19 +111,19 @@ class EncoderIdenticalLayer(nn.Module):
         self.model_dim = model_dim
         self.h = h
 
-        self.w_i_Q_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_K_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_V_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_O = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False)
-        self.layer_normalization1 = nn.LayerNorm(self.model_dim) # exclude batch dimension
+        self.w_i_Q_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_K_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_V_list = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_O = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False).to(device)
+        self.layer_normalization1 = nn.LayerNorm(self.model_dim).to(device) # exclude batch dimension
 
-        self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True)
-        self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True)
-        self.layer_normalization2 = nn.LayerNorm(self.model_dim) # TODO(completed): 맞나?
+        self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True).to(device)
+        self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True).to(device)
+        self.layer_normalization2 = nn.LayerNorm(self.model_dim).to(device) # TODO(completed): 맞나?
 
-        self.dropout = nn.Dropout(p = 0.1)
-        self.softmax = nn.Softmax(dim = 2) # TODO(completed): 이게 맞나? 2인 것 같다.
-        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p = 0.1).to(device)
+        self.softmax = nn.Softmax(dim = 2).to(device) # TODO(completed): 이게 맞나? 2인 것 같다.
+        self.relu = nn.ReLU().to(device)
 
     def forward(self, x):
         ### Sublayer 1
@@ -165,12 +165,12 @@ class Decoder(nn.Module):
         self.model_dim = model_dim
         self.h = h
 
-        self.identical_layer1 = DecoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer2 = DecoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer3 = DecoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer4 = DecoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer5 = DecoderIdenticalLayer(self.model_dim, self.h)
-        self.identical_layer6 = DecoderIdenticalLayer(self.model_dim, self.h)
+        self.identical_layer1 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer2 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer3 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer4 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer5 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
+        self.identical_layer6 = DecoderIdenticalLayer(self.model_dim, self.h).to(device)
 
     def forward(self, x, y):
         x = self.identical_layer1(x, y)
@@ -187,25 +187,25 @@ class DecoderIdenticalLayer(nn.Module):
         self.model_dim = model_dim
         self.h = h
 
-        self.w_i_Q_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_K_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_V_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_O_first = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False)
-        self.layer_normalization1 = nn.LayerNorm(self.model_dim) # exclude batch dimension
+        self.w_i_Q_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_K_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_V_list_first = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_O_first = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False).to(device)
+        self.layer_normalization1 = nn.LayerNorm(self.model_dim).to(device) # exclude batch dimension
 
-        self.w_i_Q_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_K_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_i_V_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False) for _ in range(self.h)]
-        self.w_O_second = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False)
-        self.layer_normalization2 = nn.LayerNorm(self.model_dim) # exclude batch dimension
+        self.w_i_Q_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_K_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_i_V_list_second = [nn.Linear(in_features = self.model_dim, out_features = self.model_dim // self.h, bias = False).to(device) for _ in range(self.h)]
+        self.w_O_second = nn.Linear(in_features = self.h * (self.model_dim // self.h), out_features = self.model_dim, bias = False).to(device)
+        self.layer_normalization2 = nn.LayerNorm(self.model_dim).to(device) # exclude batch dimension
         
-        self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True)
-        self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True)
-        self.layer_normalization3 = nn.LayerNorm(self.model_dim)
+        self.feed_forward_network1 = nn.Linear(in_features = 512, out_features = 2048, bias = True).to(device)
+        self.feed_forward_network2 = nn.Linear(in_features = 2048, out_features = 512, bias = True).to(device)
+        self.layer_normalization3 = nn.LayerNorm(self.model_dim).to(device)
 
-        self.dropout = nn.Dropout(p = 0.1)
-        self.softmax = nn.Softmax(dim = 2)
-        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p = 0.1).to(device)
+        self.softmax = nn.Softmax(dim = 2).to(device)
+        self.relu = nn.ReLU().to(device)
 
     def forward(self, x, y): # TODO(completed): masking 구현.
         ### Sublayer 1
@@ -265,7 +265,7 @@ class DecoderIdenticalLayer(nn.Module):
         return ffn_output
 
     def masking(self, x):
-        masking_tensor = torch.triu(torch.empty(x.shape[1], x.shape[2]).fill_(float("-inf")), diagonal = 1)
+        masking_tensor = torch.triu(torch.empty(x.shape[1], x.shape[2]).fill_(float("-inf")), diagonal = 1).to(device)
         for idx in range(x.shape[0]):
             x[idx] += masking_tensor
         return x
