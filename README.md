@@ -1,4 +1,4 @@
-# NMT_practice
+# Transformer
 Boilerplate code for neural machine translation.
 
 * Requirements: Python 3
