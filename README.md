@@ -37,5 +37,5 @@ Run the cells in main.ipynb in order
 - positional encoding 재확인
 
 ## :moyai: References
-- Attention Is All You Need (https://arxiv.org/abs/1706.03762)
-- Transformer in DGL (https://github.com/dmlc/dgl/tree/master/examples/pytorch/transformer)
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
+- [Transformer in DGL](https://github.com/dmlc/dgl/tree/master/examples/pytorch/transformer)
