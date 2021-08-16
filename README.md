@@ -16,8 +16,8 @@ kora
 ```
 
 ## :computer: Usage
-### Train and validation
-Run the cells in main.ipynb in order
+### Train
+Run the cells in main.ipynb sequentially
 
 ## :question: Implementation Details
 - Training and validation 구현
