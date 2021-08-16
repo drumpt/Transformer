@@ -17,7 +17,7 @@ kora
 
 ## :computer: Usage
 ### Train
-Run the cells in main.ipynb sequentially
+Run the cells in main.ipynb in order
 
 ## :question: Implementation Details
 - Training and validation 구현
@@ -38,4 +38,5 @@ Run the cells in main.ipynb sequentially
 
 ## :moyai: References
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
+- [The Annotated Transformer](https://nlp.seas.harvard.edu/2018/04/03/attention.html#training-loop)
 - [Transformer in DGL](https://github.com/dmlc/dgl/tree/master/examples/pytorch/transformer)
